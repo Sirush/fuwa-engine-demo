@@ -136,6 +136,23 @@ button:focus-visible {
 	color: var(--muted);
 }
 
+#log {
+	display: none;
+	width: min(1920px, 100%);
+	box-sizing: border-box;
+	margin: 0 0 16px;
+	padding: 10px;
+	border: 1px solid var(--line);
+	font: 12px/1.4 ui-monospace, Consolas, monospace;
+	color: var(--muted);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+#log .error {
+	color: #ff8a80;
+}
+
 #status-notice {
 	display: none;
 	max-width: 70%;
@@ -168,13 +185,66 @@ button:focus-visible {
 		<div class="controls">
 			<button id="fullscreen" type="button">Fullscreen</button>
 		</div>
+		<div id="log"></div>
 
 		<script src="index.js"></script>
 		<script>
 const GODOT_CONFIG = {"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":22594196,"index.wasm":1508095},"focusCanvas":true,"gdextensionLibs":["fuwa_godot.wasm"],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
+// Opening the page with ?log lists the GPU limits and engine messages under the game, for devices without a console.
+const logPanel = new URLSearchParams(location.search).has('log') ? document.getElementById('log') : null;
+
+function logLine(text, isError) {
+	if (!logPanel) {
+		return;
+	}
+	const line = document.createElement('div');
+	if (isError) {
+		line.className = 'error';
+	}
+	line.textContent = text;
+	logPanel.appendChild(line);
+	while (logPanel.childElementCount > 300) {
+		logPanel.removeChild(logPanel.children[1]);
+	}
+}
+
+if (logPanel) {
+	logPanel.style.display = 'block';
+	const gl = document.createElement('canvas').getContext('webgl2');
+	const facts = [navigator.userAgent, 'devicePixelRatio ' + window.devicePixelRatio];
+	if (gl) {
+		const info = gl.getExtension('WEBGL_debug_renderer_info');
+		const highp = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+		facts.push(
+			'renderer ' + (info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)),
+			'MAX_TEXTURE_IMAGE_UNITS ' + gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS),
+			'MAX_COMBINED_TEXTURE_IMAGE_UNITS ' + gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS),
+			'MAX_FRAGMENT_UNIFORM_VECTORS ' + gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS),
+			'MAX_FRAGMENT_UNIFORM_BLOCKS ' + gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_BLOCKS),
+			'MAX_UNIFORM_BLOCK_SIZE ' + gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE),
+			'MAX_VARYING_VECTORS ' + gl.getParameter(gl.MAX_VARYING_VECTORS),
+			'MAX_TEXTURE_SIZE ' + gl.getParameter(gl.MAX_TEXTURE_SIZE),
+			'fragment highp float precision ' + highp.precision,
+		);
+	} else {
+		facts.push('no WebGL2');
+	}
+	logLine(facts.join('\n'), false);
+}
+
 // The canvas keeps its 1920x1080 size and the page scales it, so the game always renders at 1080p.
-const engine = new Engine(Object.assign({}, GODOT_CONFIG, { canvasResizePolicy: 0 }));
+const engine = new Engine(Object.assign({}, GODOT_CONFIG, {
+	canvasResizePolicy: 0,
+	onPrint: (...parts) => {
+		console.log(...parts);
+		logLine(parts.join(' '), false);
+	},
+	onPrintError: (...parts) => {
+		console.error(...parts);
+		logLine(parts.join(' '), true);
+	},
+}));
 
 (function () {
 	const frame = document.getElementById('frame');
