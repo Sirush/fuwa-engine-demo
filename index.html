@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>FuwaEngine Tech Demo</title>
+		<style>
+@font-face {
+	font-family: 'Lato';
+	src: url('Lato-Regular.ttf') format('truetype');
+	font-display: swap;
+}
+
+:root {
+	--text: #f2f3f7;
+	--muted: #8c92a3;
+	--line: #3a3f4d;
+	--gutter: 16px;
+	/* Title, disclaimer and the button row under the game. */
+	--chrome: 150px;
+}
+
+html, body {
+	margin: 0;
+	padding: 0;
+	background: #000;
+	color: var(--text);
+	font-family: 'Lato', system-ui, sans-serif;
+}
+
+body {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 0 var(--gutter);
+	box-sizing: border-box;
+}
+
+header {
+	text-align: center;
+	padding: 20px 0 14px;
+}
+
+h1 {
+	margin: 0;
+	font-size: 28px;
+	font-weight: normal;
+	letter-spacing: 0.02em;
+}
+
+.disclaimer {
+	margin: 6px 0 0;
+	font-size: 13px;
+	color: var(--muted);
+}
+
+#frame {
+	position: relative;
+	width: min(1920px, 100%, calc((100vh - var(--chrome)) * 16 / 9));
+	aspect-ratio: 16 / 9;
+	background: #000;
+}
+
+#canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+	touch-action: none;
+}
+
+#canvas:focus {
+	outline: none;
+}
+
+#frame:fullscreen {
+	width: 100vw;
+	height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+#frame:fullscreen #canvas {
+	width: min(100vw, calc(100vh * 16 / 9));
+	height: auto;
+	aspect-ratio: 16 / 9;
+}
+
+.controls {
+	width: min(1920px, 100%, calc((100vh - var(--chrome)) * 16 / 9));
+	display: flex;
+	justify-content: flex-end;
+	padding: 10px 0 16px;
+}
+
+button {
+	font: inherit;
+	font-size: 14px;
+	color: var(--text);
+	background: transparent;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	padding: 6px 14px;
+	cursor: pointer;
+}
+
+button:hover {
+	border-color: var(--muted);
+}
+
+button:focus-visible {
+	outline: 2px solid var(--text);
+	outline-offset: 2px;
+}
+
+#status {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	gap: 14px;
+	background: #000;
+	visibility: hidden;
+}
+
+#status-progress {
+	width: 40%;
+	accent-color: var(--text);
+}
+
+#status-label {
+	font-size: 14px;
+	color: var(--muted);
+}
+
+#status-notice {
+	display: none;
+	max-width: 70%;
+	color: var(--text);
+	line-height: 1.4;
+	text-align: center;
+	white-space: pre-line;
+}
+		</style>
+		
+	</head>
+	<body>
+		<header>
+			<h1>FuwaEngine Tech Demo</h1>
+			<p class="disclaimer">Art, Music &amp; SFX are AI generated</p>
+		</header>
+
+		<div id="frame">
+			<canvas id="canvas" width="1920" height="1080">
+				Your browser does not support the canvas tag.
+			</canvas>
+			<noscript>This demo needs JavaScript.</noscript>
+			<div id="status">
+				<progress id="status-progress"></progress>
+				<div id="status-label">Loading</div>
+				<div id="status-notice"></div>
+			</div>
+		</div>
+
+		<div class="controls">
+			<button id="fullscreen" type="button">Fullscreen</button>
+		</div>
+
+		<script src="index.js"></script>
+		<script>
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":22594196,"index.wasm":1508095},"focusCanvas":true,"gdextensionLibs":["fuwa_godot.wasm"],"godotPoolSize":4};
+const GODOT_THREADS_ENABLED = false;
+// The canvas keeps its 1920x1080 size and the page scales it, so the game always renders at 1080p.
+const engine = new Engine(Object.assign({}, GODOT_CONFIG, { canvasResizePolicy: 0 }));
+
+(function () {
+	const frame = document.getElementById('frame');
+	const canvas = document.getElementById('canvas');
+	const statusOverlay = document.getElementById('status');
+	const statusProgress = document.getElementById('status-progress');
+	const statusLabel = document.getElementById('status-label');
+	const statusNotice = document.getElementById('status-notice');
+
+	document.getElementById('fullscreen').addEventListener('click', () => {
+		if (document.fullscreenElement) {
+			document.exitFullscreen();
+		} else {
+			frame.requestFullscreen().then(() => canvas.focus(), () => {});
+		}
+	});
+
+	function showFailure(err) {
+		console.error(err);
+		const text = err instanceof Error ? err.message : (typeof err === 'string' ? err : 'The demo could not start.');
+		statusProgress.style.display = 'none';
+		statusLabel.style.display = 'none';
+		statusNotice.textContent = text;
+		statusNotice.style.display = 'block';
+		statusOverlay.style.visibility = 'visible';
+	}
+
+	const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
+	if (missing.length !== 0) {
+		showFailure('This browser is missing features the demo needs:\n' + missing.join('\n'));
+		return;
+	}
+	statusOverlay.style.visibility = 'visible';
+	engine.startGame({
+		'onProgress': function (current, total) {
+			if (current > 0 && total > 0) {
+				statusProgress.value = current;
+				statusProgress.max = total;
+			} else {
+				statusProgress.removeAttribute('value');
+				statusProgress.removeAttribute('max');
+			}
+		},
+	}).then(() => {
+		statusOverlay.remove();
+		canvas.focus();
+	}, showFailure);
+}());
+		</script>
+	</body>
+</html>
+
